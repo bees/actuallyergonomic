@@ -53,6 +53,7 @@ static uint16_t IdleCount = 500;
  */
 static uint16_t IdleMSRemaining = 0;
 
+static uint16_t flip = 0;
 
 /** Main program entry point. This routine configures the hardware required by the application, then
  *  enters a loop to run the application tasks in sequence.
@@ -94,7 +95,6 @@ void SetupHardware(void)
 
 	/* Hardware Initialization */
 	USB_Init();
-	Buttons_Init();
 }
 
 /** Event handler for the USB_Connect event. This indicates that the device is enumerating via the status LEDs and
@@ -162,16 +162,6 @@ void EVENT_USB_Device_ControlRequest(void)
 			if (USB_ControlRequest.bmRequestType == (REQDIR_HOSTTODEVICE | REQTYPE_CLASS | REQREC_INTERFACE))
 			{
 				Endpoint_ClearSETUP();
-
-				/* Wait until the LED report has been sent by the host */
-				while (!(Endpoint_IsOUTReceived()))
-				{
-					if (USB_DeviceState == DEVICE_STATE_Unattached)
-					  return;
-				}
-
-				/* Read in the LED report from the host */
-				uint8_t LEDStatus = Endpoint_Read_8();
 
 				Endpoint_ClearOUT();
 				Endpoint_ClearStatusStage();
@@ -244,9 +234,6 @@ void EVENT_USB_Device_StartOfFrame(void)
  */
 void CreateKeyboardReport(USB_KeyboardReport_Data_t* const ReportData)
 {
-	uint8_t JoyStatus_LCL     = Joystick_GetStatus();
-	uint8_t ButtonStatus_LCL  = Buttons_GetStatus();
-
 	uint8_t UsedKeyCodes      = 0;
 
 	/* Clear the report contents */
@@ -255,21 +242,15 @@ void CreateKeyboardReport(USB_KeyboardReport_Data_t* const ReportData)
 	/* Make sent key uppercase by indicating that the left shift key is pressed */
 	ReportData->Modifier = HID_KEYBOARD_MODIFIER_LEFTSHIFT;
 
-	if (JoyStatus_LCL & JOY_UP)
-	  ReportData->KeyCode[UsedKeyCodes++] = HID_KEYBOARD_SC_A;
-	else if (JoyStatus_LCL & JOY_DOWN)
-	  ReportData->KeyCode[UsedKeyCodes++] = HID_KEYBOARD_SC_B;
-
-	if (JoyStatus_LCL & JOY_LEFT)
-	  ReportData->KeyCode[UsedKeyCodes++] = HID_KEYBOARD_SC_C;
-	else if (JoyStatus_LCL & JOY_RIGHT)
-	  ReportData->KeyCode[UsedKeyCodes++] = HID_KEYBOARD_SC_D;
-
-	if (JoyStatus_LCL & JOY_PRESS)
-	  ReportData->KeyCode[UsedKeyCodes++] = HID_KEYBOARD_SC_E;
-
-	if (ButtonStatus_LCL & BUTTONS_BUTTON1)
-	  ReportData->KeyCode[UsedKeyCodes++] = HID_KEYBOARD_SC_F;
+    if (flip++ % 2 == 0) {
+        ReportData->KeyCode[UsedKeyCodes++] = HID_KEYBOARD_SC_F;
+        ReportData->KeyCode[UsedKeyCodes++] = HID_KEYBOARD_SC_F;
+        ReportData->KeyCode[UsedKeyCodes++] = HID_KEYBOARD_SC_F;
+    } else {
+        ReportData->KeyCode[UsedKeyCodes++] = HID_KEYBOARD_SC_R;
+        ReportData->KeyCode[UsedKeyCodes++] = HID_KEYBOARD_SC_R;
+        ReportData->KeyCode[UsedKeyCodes++] = HID_KEYBOARD_SC_R;
+    }
 }
 
 /** Sends the next HID report to the host, via the keyboard data endpoint. */
@@ -314,7 +295,7 @@ void SendNextReport(void)
 	}
 }
 
-/** Reads the next LED status report from the host from the LED data endpoint, if one has been sent. */
+/** Currently not using this */
 void ReceiveNextReport(void)
 {
 	/* Select the Keyboard LED Report Endpoint */
@@ -323,14 +304,6 @@ void ReceiveNextReport(void)
 	/* Check if Keyboard LED Endpoint contains a packet */
 	if (Endpoint_IsOUTReceived())
 	{
-		/* Check to see if the packet contains data */
-		if (Endpoint_IsReadWriteAllowed())
-		{
-			/* Read in the LED report from the host */
-			uint8_t LEDReport = Endpoint_Read_8();
-
-			/* Process the read LED report from the host */
-			ProcessLEDReport(LEDReport);
 		/* Handshake the OUT Endpoint - clear endpoint and ready for next report */
 		Endpoint_ClearOUT();
 	}
